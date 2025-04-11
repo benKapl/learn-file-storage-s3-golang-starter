@@ -9,6 +9,11 @@ import (
 	"github.com/google/uuid"
 )
 
+var imageMIMETypes = map[string]struct{}{
+	"image/jpeg": {},
+	"image/png":  {},
+}
+
 func (cfg apiConfig) ensureAssetsDir() error {
 	if _, err := os.Stat(cfg.assetsRoot); os.IsNotExist(err) {
 		return os.Mkdir(cfg.assetsRoot, 0755)
@@ -35,4 +40,9 @@ func mediaTypeToExt(mediaType string) string {
 		return ".bin"
 	}
 	return "." + parts[1]
+}
+
+func isImage(mimeType string) bool {
+	_, ok := imageMIMETypes[mimeType]
+	return ok
 }
