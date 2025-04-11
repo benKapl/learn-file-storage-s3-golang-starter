@@ -1,10 +1,12 @@
 package main
 
 import (
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -56,15 +58,28 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	defer file.Close()
 
 	mediaType := header.Header.Get("Content-Type")
-	fileData, err := io.ReadAll(file)
+	_, extension, ok := strings.Cut(mediaType, "/") // Get the string after '/' in the mime type
+	if !ok {
+		respondWithError(w, http.StatusInternalServerError, "Error getting file extension", err)
+		return
+	}
+	fileName := fmt.Sprintf("%s.%s", videoIDString, extension)
+
+	thumbnailPath := filepath.Join(cfg.assetsRoot, fileName)
+	thumbnailFile, err := os.Create(thumbnailPath)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to get file data", err)
+		respondWithError(w, http.StatusInternalServerError, "Unable to create thumbnail in filesystem", err)
 		return
 	}
 
-	stringFileData := base64.StdEncoding.EncodeToString(fileData)
-	thumbnailURL := "data:" + mediaType + ";base64," + stringFileData // data url containing the encoded thumbnail
+	_, err = io.Copy(thumbnailFile, file)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Unable to copy multipart form content to thumbnail", err)
+		return
+	}
 
+	thumbnailURL := fmt.Sprintf("http://localhost:%s/%s", cfg.port, thumbnailPath)
+	fmt.Println(thumbnailURL)
 	video.ThumbnailURL = &thumbnailURL
 
 	err = cfg.db.UpdateVideo(video)
