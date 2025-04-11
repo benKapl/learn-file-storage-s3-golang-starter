@@ -5,8 +5,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -35,17 +33,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
-	// Check video and authorization
-	video, err := cfg.db.GetVideo(videoID)
-	if err != nil {
-		respondWithError(w, http.StatusNotFound, "Video does not exist", err)
-		return
-	}
-	if video.UserID != userID {
-		respondWithError(w, http.StatusUnauthorized, "Invalid operation", err)
-		return
-	}
-
 	// Parse Mutlipart form
 	const maxMemory = 10 << 20
 	r.ParseMultipartForm(maxMemory)
@@ -58,29 +45,39 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	defer file.Close()
 
 	mediaType := header.Header.Get("Content-Type")
-	_, extension, ok := strings.Cut(mediaType, "/") // Get the string after '/' in the mime type
-	if !ok {
-		respondWithError(w, http.StatusInternalServerError, "Error getting file extension", err)
+	if mediaType == "" {
+		respondWithError(w, http.StatusBadRequest, "Missing Content-Type for thumbnail", nil)
 		return
 	}
-	fileName := fmt.Sprintf("%s.%s", videoIDString, extension)
 
-	thumbnailPath := filepath.Join(cfg.assetsRoot, fileName)
-	thumbnailFile, err := os.Create(thumbnailPath)
+	// Create asset in filesystem
+	assetPath := getAssetPath(videoID, mediaType)
+	assetDiskPath := cfg.getAssetDiskPath(assetPath)
+
+	dst, err := os.Create(assetDiskPath)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to create thumbnail in filesystem", err)
+		respondWithError(w, http.StatusInternalServerError, "Unable to create file on server", err)
+		return
+	}
+	defer dst.Close()
+	if _, err = io.Copy(dst, file); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error saving file", err)
 		return
 	}
 
-	_, err = io.Copy(thumbnailFile, file)
+	// Check video and authorization
+	video, err := cfg.db.GetVideo(videoID)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Unable to copy multipart form content to thumbnail", err)
+		respondWithError(w, http.StatusNotFound, "Video does not exist", err)
+		return
+	}
+	if video.UserID != userID {
+		respondWithError(w, http.StatusUnauthorized, "Invalid operation", err)
 		return
 	}
 
-	thumbnailURL := fmt.Sprintf("http://localhost:%s/%s", cfg.port, thumbnailPath)
-	fmt.Println(thumbnailURL)
-	video.ThumbnailURL = &thumbnailURL
+	url := cfg.getAssetURL(assetPath)
+	video.ThumbnailURL = &url
 
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
