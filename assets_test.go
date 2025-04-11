@@ -2,9 +2,9 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
@@ -32,37 +32,40 @@ func setupTestAPIConfig(t *testing.T) apiConfig {
 
 func TestGetAssetPath(t *testing.T) {
 	testCases := []struct {
-		videoID   uuid.UUID
 		mediaType string
-		expected  string
+		checkFn   func(string) bool
 	}{
 		{
-			videoID:   uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
 			mediaType: "image/jpeg",
-			expected:  "550e8400-e29b-41d4-a716-446655440000.jpeg",
+			checkFn: func(path string) bool {
+				return strings.HasSuffix(path, ".jpeg") && len(path) > 5
+			},
 		},
 		{
-			videoID:   uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
 			mediaType: "image/png",
-			expected:  "550e8400-e29b-41d4-a716-446655440000.png",
+			checkFn: func(path string) bool {
+				return strings.HasSuffix(path, ".png") && len(path) > 4
+			},
 		},
 		{
-			videoID:   uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
 			mediaType: "video/mp4",
-			expected:  "550e8400-e29b-41d4-a716-446655440000.mp4",
+			checkFn: func(path string) bool {
+				return strings.HasSuffix(path, ".mp4") && len(path) > 4
+			},
 		},
 		{
-			videoID:   uuid.MustParse("550e8400-e29b-41d4-a716-446655440000"),
 			mediaType: "invalid",
-			expected:  "550e8400-e29b-41d4-a716-446655440000.bin",
+			checkFn: func(path string) bool {
+				return strings.HasSuffix(path, ".bin") && len(path) > 4
+			},
 		},
 	}
 
 	for _, tc := range testCases {
-		actual := getAssetPath(tc.videoID, tc.mediaType)
-		if actual != tc.expected {
-			t.Errorf("got %s but expected %s for videoID %s and mediaType %s",
-				actual, tc.expected, tc.videoID, tc.mediaType)
+		actual := getAssetPath(tc.mediaType)
+		if !tc.checkFn(actual) {
+			t.Errorf("got %s but expected path with correct extension for mediaType %s",
+				actual, tc.mediaType)
 		}
 	}
 }
