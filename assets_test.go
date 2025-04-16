@@ -158,3 +158,8 @@ func TestIsImage(t *testing.T) {
 		}
 	}
 }
+
+// func TestGetVideoAspectRatio(t *testing.T) {
+// 	ratio, _ := getVideoAspectRatio("samples/boots-video-vertical.mp4")
+// 	fmt.Println(ratio)
+// }
