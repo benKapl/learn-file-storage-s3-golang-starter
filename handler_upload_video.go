@@ -98,13 +98,28 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		prefix = "other"
 	}
 
+	// Process Video
+	processedPath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Error processing video for fast start", err)
+		return
+	}
+	defer os.Remove(processedPath)
+
+	processedFile, err := os.Open(processedPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not read processed video", err)
+		return
+	}
+	defer processedFile.Close()
+
 	// Put object to s3
 	key := prefix + "/" + getAssetPath(mediaType)
 
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(key),
-		Body:        tempFile,
+		Body:        processedFile,
 		ContentType: aws.String(mediaType),
 	})
 	if err != nil {
@@ -113,7 +128,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Update video URL
-	url := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, key)
+	url := fmt.Sprintf("%s,%s", cfg.s3Bucket, key) // "<bucket-name>,<key>"
 	video.VideoURL = &url
 	err = cfg.db.UpdateVideo(video)
 	if err != nil {
